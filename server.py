@@ -136,18 +136,19 @@ def navigium_uebersicht() -> dict:
 
 @mcp.tool(annotations=READ_ONLY)
 @guarded
-def navigium_lektionen(suche: str | None = None, sprache: str = "LA") -> list[dict]:
-    """Navigium vocabulary lessons of the school (id, name, gruppe), incl. Klett/Pontes where licensed.
-    suche filters by name (e.g. 'prima_3'). sprache: LA, GR, ... Vocabulary via navigium_vokabeln."""
-    return navigium.lessons(suche, sprache)
+def navigium_lektionen(suche: str | None = None, gruppe: str = "schule", limit: int = 100) -> dict:
+    """Navigium vocabulary lessons as compact lines 'id | name | unterkategorie'.
+    gruppe: 'schule' (school and class lessons, default), 'privat', 'klett' (Klett/Pontes, word lists; ~500),
+    'alle'. suche filters by name or class (e.g. 'prima_3', '8c'). Vocabulary via navigium_vokabeln(id)."""
+    return navigium.lessons(suche, gruppe, limit=limit)
 
 
 @mcp.tool(annotations=READ_ONLY)
 @guarded
-def navigium_vokabeln(lektion_id: int) -> dict:
-    """All vocabulary of one Navigium lesson: latein, stammformen, genus, wortart, deutsch (meanings),
-    phrasen, merkhilfe. lektion_id from navigium_lektionen."""
-    return navigium.vocab(lektion_id)
+def navigium_vokabeln(lektion_id: int, kompakt: bool = False) -> dict:
+    """All vocabulary of one Navigium lesson (id from navigium_lektionen): latein, stammformen, genus,
+    wortart, deutsch (meanings), phrasen, merkhilfe. kompakt=True returns one short line per word."""
+    return navigium.vocab(lektion_id, kompakt)
 
 
 @mcp.tool(annotations=READ_ONLY)

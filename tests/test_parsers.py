@@ -103,6 +103,36 @@ class NavigiumTest(unittest.TestCase):
         self.assertEqual(out["vokabeln"][1]["stammformen"], "dominus, -i")
 
 
+class NavigiumFormatTest(unittest.TestCase):
+    ITEMS = [
+        {"id": 1, "name": "prima_1-1", "unterkategorie": None, "gruppe": "default"},
+        {"id": 2, "name": "Klassenliste 15", "unterkategorie": "8c_Göring", "gruppe": "default"},
+        {"id": 3, "name": "Grundwortschatz", "unterkategorie": "Vokabular nach Wortarten", "gruppe": "navigium"},
+        {"id": 4, "name": "meine", "unterkategorie": None, "gruppe": "privat"},
+    ]
+
+    def test_default_is_school_group_and_compact(self):
+        out = navigium.format_lessons(self.ITEMS, "schule", None, 100)
+        self.assertEqual(out["lektionen"], ["1 | prima_1-1", "2 | Klassenliste 15 | 8c_Göring"])
+        self.assertEqual(out["gesamt"], 2)
+
+    def test_search_matches_name_and_class(self):
+        self.assertEqual(navigium.format_lessons(self.ITEMS, "alle", "8c", 100)["gesamt"], 1)
+        self.assertEqual(navigium.format_lessons(self.ITEMS, "klett", "wortschatz", 100)["gesamt"], 1)
+
+    def test_limit_adds_hint(self):
+        out = navigium.format_lessons(self.ITEMS, "alle", None, 2)
+        self.assertEqual((out["gesamt"], out["angezeigt"]), (4, 2))
+        self.assertIn("hinweis", out)
+
+    def test_compact_vocab_lines(self):
+        data = {"lektionId": 1, "lektionName": "L", "vokabeln": [
+            {"latein": "dominus", "stammformen": "dominus, -i", "genus": "m", "wortart": "SUBST",
+             "bedeutungen": ["Herr"]}]}
+        self.assertEqual(navigium.parse_vocab(data, kompakt=True)["vokabeln"],
+                         ["dominus, -i (m) [SUBST]: Herr"])
+
+
 class HttpTest(unittest.TestCase):
     def test_clean_text_truncates(self):
         out = clean_text("<p>" + "x" * 100 + "</p><script>bad()</script>", limit=10)

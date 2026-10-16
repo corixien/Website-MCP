@@ -66,6 +66,12 @@ def overview() -> dict:
 def page(path: str) -> dict:
     if path == "/_selbsttest":
         return selftest()
+    if path.startswith("/_lektionen") or path.startswith("/_vokabeln"):  # aliases of the dedicated tools
+        route, _, query = path.partition("?")
+        args = dict(part.split("=", 1) for part in query.split("&") if "=" in part)
+        if route == "/_lektionen":
+            return lessons(args.get("suche"), args.get("gruppe", "schule"), limit=int(args.get("limit", 100)))
+        return vocab(int(route.rsplit("/", 1)[-1]), args.get("kompakt") == "1")
     if not path.startswith("/") or path.startswith("//"):
         raise SiteError("Pfad muss mit / beginnen.")
     return _cache.run(lambda s: _fetch(s, path))
@@ -101,27 +107,54 @@ def parse_lessons(items: list[dict]) -> list[dict]:
     return list(lessons.values())
 
 
-def lessons(suche: str | None = None, sprache: str = "LA") -> list[dict]:
+GROUPS = {"schule": {"default"}, "privat": {"privat"}, "klett": {"navigium"}, "alle": None}
+
+
+def format_lessons(found: list[dict], gruppe: str, suche: str | None, limit: int) -> dict:
+    allowed = GROUPS.get(gruppe, GROUPS["schule"])
+    if allowed is not None:
+        found = [x for x in found if x["gruppe"] in allowed]
+    if suche:
+        needle = suche.lower()
+        found = [x for x in found if needle in (x["name"] or "").lower()
+                 or needle in (x["unterkategorie"] or "").lower()]
+    shown = found[:limit]
+    lines = [f"{x['id']} | {x['name']}" + (f" | {x['unterkategorie']}" if x["unterkategorie"] else "")
+             for x in shown]
+    result: dict[str, Any] = {"gruppe": gruppe, "gesamt": len(found), "angezeigt": len(shown),
+                              "format": "id | name | unterkategorie", "lektionen": lines}
+    if len(found) > len(shown):
+        result["hinweis"] = "Liste gekürzt: mit suche eingrenzen oder limit erhöhen."
+    return result
+
+
+def lessons(suche: str | None = None, gruppe: str = "schule", sprache: str = "LA", limit: int = 100) -> dict:
     def run(s: Session) -> list[dict]:
         user = s.data["user"]
         merged: list[dict] = []
+        errors: list[str] = []
         for path, extra in (("/schule/vokabellektionen/inklPontes", {}),
                             ("/schule/vokabellektionen", {"lang": sprache})):
             try:
                 merged.extend(_json(s, path, schule=SCHOOL, user=user, **extra))
-            except SiteError:
-                continue
+            except SiteError as exc:
+                errors.append(str(exc))
+        if not merged and errors:
+            raise SiteError(errors[0])
         found = parse_lessons(merged)
-        if sprache:
-            found = [x for x in found if not x["sprache"] or x["sprache"] == sprache]
-        if suche:
-            found = [x for x in found if suche.lower() in (x["name"] or "").lower()]
-        return found
+        return [x for x in found if not sprache or not x["sprache"] or x["sprache"] == sprache]
 
-    return _cache.run(run)
+    return format_lessons(_cache.run(run), gruppe, suche, max(1, int(limit)))
 
 
-def parse_vocab(data: dict) -> dict:
+def vocab_line(v: dict) -> str:
+    head = v.get("stammformen") or v.get("latein")
+    gender = f" ({v['genus']})" if v.get("genus") else ""
+    kind = f" [{v['wortart']}]" if v.get("wortart") else ""
+    return f"{head}{gender}{kind}: {'; '.join(v.get('deutsch') or [])}"
+
+
+def parse_vocab(data: dict, kompakt: bool = False) -> dict:
     words = []
     for v in data.get("vokabeln", []):
         entry = {
@@ -139,12 +172,14 @@ def parse_vocab(data: dict) -> dict:
             "pflicht": v.get("obligatorisch"),
         }
         words.append({k: val for k, val in entry.items() if val not in (None, "", [], {})})
+    if kompakt:
+        words = [vocab_line(w) for w in words]
     return {"id": data.get("lektionId"), "name": data.get("lektionName"), "anzahl": len(words), "vokabeln": words}
 
 
-def vocab(lesson_id: int) -> dict:
+def vocab(lesson_id: int, kompakt: bool = False) -> dict:
     return _cache.run(lambda s: parse_vocab(
-        _json(s, f"/schule/rest/vokabellektion/{int(lesson_id)}", schule=SCHOOL, user=s.data["user"])))
+        _json(s, f"/schule/rest/vokabellektion/{int(lesson_id)}", schule=SCHOOL, user=s.data["user"]), kompakt))
 
 
 def assignments() -> dict:
@@ -187,12 +222,12 @@ def selftest() -> dict:
         except Exception as exc:  # diagnostics only
             report[name] = {"fehler": f"{exc.__class__.__name__}: {str(exc)[:200]}"}
     try:
-        found = lessons()
-        report["lektionen_gesamt"] = len(found)
-        report["lektionen_beispiel"] = [x["name"] for x in found[:3]]
-        if found:
+        found = lessons(gruppe="alle", limit=1000)
+        report["lektionen_gesamt"] = found["gesamt"]
+        report["lektionen_beispiel"] = found["lektionen"][:3]
+        if found["lektionen"]:
             t = time.monotonic()
-            first = vocab(found[0]["id"])
+            first = vocab(int(found["lektionen"][0].split(" | ")[0]))
             report["vokabeln_erste_lektion"] = {"name": first["name"], "anzahl": first["anzahl"],
                                                 "sekunden": round(time.monotonic() - t, 1)}
     except Exception as exc:  # diagnostics only
