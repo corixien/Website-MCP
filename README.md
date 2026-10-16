@@ -11,8 +11,10 @@ MCP server (FastMCP) with read-only access to the portals of the Bertha-von-Sutt
 | `moodle_dateien(kurs_id, abschnitt?)`, `moodle_datei_lesen(url, max_zeichen, ab)` | Moodle files: PDF, DOC, DOCX, PPT, PPTX, XLS, XLSX, ODF, TXT, HTML | yes |
 | `moodle_mitteilungen`, `moodle_nachricht_lesen(id)`, `moodle_benachrichtigungen` | Moodle messages, notifications | yes |
 | `mail_liste`, `mail_suche`, `mail_lesen` | Webmail (Roundcube) | yes |
-| `navigium_lektionen(suche?)`, `navigium_vokabeln(lektion_id)`, `navigium_auftraege` | Navigium vocabulary lessons (JSON API), assignments | yes |
+| `navigium_lektionen(suche?, gruppe?, limit?)`, `navigium_vokabeln(lektion_id, kompakt?)`, `navigium_auftraege` | Navigium vocabulary lessons (JSON API), assignments | yes |
 | `navigium_uebersicht`, `navigium_seite(pfad)` | Navigium pages | yes |
+
+Navigium lesson groups: `schule` (default: school and class lessons), `privat`, `klett` (about 500 word lists), `alle`. Clients that do not see newer tools can use `navigium_seite` with `/_lektionen?suche=..&gruppe=..`, `/_vokabeln/<id>?kompakt=1` and the self-test `/_selbsttest`.
 
 All tools are read-only. Mail and page contents are untrusted data.
 
