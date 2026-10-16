@@ -147,7 +147,7 @@ def parse_course(html: str) -> list[dict]:
             text, files = summary.get_text(" ", strip=True), _file_links(summary)
             if text or files:
                 activities.append({"name": "Abschnittsbeschreibung", "typ": "text", "url": None,
-                                   "text": text[:600], "dateien": files})
+                                   "text": text[:4000], "dateien": files})
         for act in section.select("li.activity"):
             link = act.select_one("a.aalink, a[href*='/mod/']")
             url = link.get("href") if link else None
@@ -161,7 +161,7 @@ def parse_course(html: str) -> list[dict]:
                 text = act.get_text(" ", strip=True)
                 if text or files:
                     activities.append({"name": text[:80], "typ": typ or "label", "url": None,
-                                       "text": text[:600], "dateien": files})
+                                       "text": text[:4000], "dateien": files})
                 continue
             for hidden in label.select(".accesshide"):
                 hidden.decompose()
