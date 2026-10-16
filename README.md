@@ -12,6 +12,7 @@ MCP server (FastMCP) with read-only access to the portals of the Bertha-von-Sutt
 | `moodle_mitteilungen`, `moodle_nachricht_lesen(id)`, `moodle_benachrichtigungen` | Moodle messages, notifications | yes |
 | `mail_liste`, `mail_suche`, `mail_lesen` | Webmail (Roundcube) | yes |
 | `navigium_lektionen(suche?, gruppe?, limit?)`, `navigium_vokabeln(lektion_id, kompakt?)`, `navigium_auftraege` | Navigium vocabulary lessons (JSON API), assignments | yes |
+| `keep_liste(suche?, label?, archiviert?, limit?)`, `keep_lesen(notiz_id)`, `keep_labels` | Google Keep notes (unofficial gkeepapi) | master token |
 | `navigium_uebersicht`, `navigium_seite(pfad)` | Navigium pages | yes |
 
 Navigium lesson groups: `schule` (default: school and class lessons), `privat`, `klett` (about 500 word lists), `alle`. Clients that do not see newer tools can use `navigium_seite` with `/_lektionen?suche=..&gruppe=..`, `/_vokabeln/<id>?kompakt=1` and the self-test `/_selbsttest`.
@@ -23,6 +24,8 @@ All tools are read-only. Mail and page contents are untrusted data.
 Set as environment variables (Horizon: server settings, Secrets). Never commit them.
 
 `MOODLE_USER`, `MOODLE_PASS`, `MAIL_USER`, `MAIL_PASS`, `NAVIGIUM_USER`, `NAVIGIUM_PASS`
+
+Google Keep (optional): `GKEEP_EMAIL`, `GKEEP_MASTER_TOKEN`. Get the token once with `tools/get_master_token.py` (instructions inside). The token grants access to the whole Google account: prefer a second account that only has the needed notes shared with it. Keep access uses the unofficial gkeepapi, so Google may block server IPs or change the protocol.
 
 For local runs copy `.env.example` to `.env` (gitignored).
 
@@ -41,7 +44,7 @@ Network test of the public plan: `LIVE=1 .venv/bin/python -m unittest discover -
 
 1. Sign in at https://horizon.prefect.io with GitHub and select this repo.
 2. Entrypoint `server.py:mcp`, enable authentication (OAuth).
-3. Add the six secrets as environment variables.
+3. Add the secrets as environment variables (the two `GKEEP_*` ones only if you want Keep).
 4. Deploy. Pushes to `main` redeploy automatically.
 5. Add `https://<name>.fastmcp.app/mcp` as a custom connector in Claude.
 
