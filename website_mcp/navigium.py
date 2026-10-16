@@ -1,6 +1,7 @@
 """Navigium Online (school licence BVS_POTSDAM): form login, read-only."""
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from bs4 import BeautifulSoup
@@ -33,7 +34,8 @@ def _login() -> Session:
     if not result.get("authenticated"):
         message = clean_text(str(result.get("message") or ""), 200)
         raise LoginFailed(f"Navigium-Login fehlgeschlagen. {message}".strip())
-    return Session(client, {"role": result.get("role"), "user": (result.get("name") or "").strip()})
+    return Session(client, {"role": result.get("role"), "user": (result.get("name") or "").strip(),
+                            "login_keys": sorted(result.keys())})
 
 
 _cache = SessionCache(_login)
@@ -62,6 +64,8 @@ def overview() -> dict:
 
 
 def page(path: str) -> dict:
+    if path == "/_selbsttest":
+        return selftest()
     if not path.startswith("/") or path.startswith("//"):
         raise SiteError("Pfad muss mit / beginnen.")
     return _cache.run(lambda s: _fetch(s, path))
@@ -157,3 +161,40 @@ def assignments() -> dict:
         }
 
     return _cache.run(run)
+
+
+def selftest() -> dict:
+    """Diagnostics (no secrets): login fields, timings, list and vocabulary checks."""
+    report: dict[str, Any] = {}
+    started = time.monotonic()
+    session = _cache.get(fresh=True)
+    report["login_sekunden"] = round(time.monotonic() - started, 1)
+    report["login_felder"] = session.data.get("login_keys")
+    report["rolle"] = session.data.get("role")
+    report["user_gesetzt"] = bool(session.data.get("user"))
+    report["user_laenge"] = len(session.data.get("user") or "")
+    for name, path, extra in (("liste_inklPontes", "/schule/vokabellektionen/inklPontes", {}),
+                              ("liste_schule", "/schule/vokabellektionen", {"lang": "LA"})):
+        t = time.monotonic()
+        try:
+            response = session.client.get(path, params={"schule": SCHOOL, "user": session.data["user"], **extra},
+                                          headers={"Accept": "application/json"})
+            data = response.json()
+            report[name] = {"status": response.status_code, "eintraege": len(data), "bytes": len(response.content),
+                            "sekunden": round(time.monotonic() - t, 1),
+                            "gruppen": sorted({str(x.get("cat")) for x in data}),
+                            "unterkategorien": sorted({str((x.get("subcat") or {}).get("name")) for x in data})[:20]}
+        except Exception as exc:  # diagnostics only
+            report[name] = {"fehler": f"{exc.__class__.__name__}: {str(exc)[:200]}"}
+    try:
+        found = lessons()
+        report["lektionen_gesamt"] = len(found)
+        report["lektionen_beispiel"] = [x["name"] for x in found[:3]]
+        if found:
+            t = time.monotonic()
+            first = vocab(found[0]["id"])
+            report["vokabeln_erste_lektion"] = {"name": first["name"], "anzahl": first["anzahl"],
+                                                "sekunden": round(time.monotonic() - t, 1)}
+    except Exception as exc:  # diagnostics only
+        report["lektionen_fehler"] = f"{exc.__class__.__name__}: {str(exc)[:300]}"
+    return report
