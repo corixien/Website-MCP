@@ -7,9 +7,12 @@ MCP server (FastMCP) with read-only access to the portals of the Bertha-von-Sutt
 | Tool | Site | Login |
 |---|---|---|
 | `vertretungsplan_lesen(klasse?)` | Substitution plan (Untis) | no |
-| `moodle_kurse`, `moodle_fristen(tage)`, `moodle_kurs_inhalt(kurs_id)`, `moodle_seite(pfad)` | Moodle | yes |
+| `moodle_kurse`, `moodle_fristen(tage)`, `moodle_kurs_inhalt(kurs_id)`, `moodle_seite(pfad)` | Moodle courses, deadlines, structure, any page | yes |
+| `moodle_dateien(kurs_id, abschnitt?)`, `moodle_datei_lesen(url, max_zeichen, ab)` | Moodle files: PDF, DOC, DOCX, PPT, PPTX, XLS, XLSX, ODF, TXT, HTML | yes |
+| `moodle_mitteilungen`, `moodle_nachricht_lesen(id)`, `moodle_benachrichtigungen` | Moodle messages, notifications | yes |
 | `mail_liste`, `mail_suche`, `mail_lesen` | Webmail (Roundcube) | yes |
-| `navigium_uebersicht`, `navigium_seite(pfad)` | Navigium Online | yes |
+| `navigium_lektionen(suche?)`, `navigium_vokabeln(lektion_id)`, `navigium_auftraege` | Navigium vocabulary lessons (JSON API), assignments | yes |
+| `navigium_uebersicht`, `navigium_seite(pfad)` | Navigium pages | yes |
 
 All tools are read-only. Mail and page contents are untrusted data.
 
@@ -42,4 +45,4 @@ Network test of the public plan: `LIVE=1 .venv/bin/python -m unittest discover -
 
 ## Status
 
-Vertretungsplan is verified against the live site. Moodle, webmail and Navigium logins and parsers follow the sites' public login flows but need a first run with real credentials; adjust the parsers if a site's markup differs.
+Document extraction is covered by tests with real PDF, DOC, DOCX, PPT, PPTX, XLS, XLSX and ODT fixtures (synthetic content). Logins and site parsers are checked against the live sites after each deploy. Scanned PDFs without a text layer return a notice instead of text (no OCR).

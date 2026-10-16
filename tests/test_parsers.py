@@ -2,7 +2,7 @@ import json
 import os
 import unittest
 
-from website_mcp import mail, moodle, vertretungsplan
+from website_mcp import mail, moodle, navigium, vertretungsplan
 from website_mcp.http import clean_text
 
 PLAN_HTML = """
@@ -72,13 +72,35 @@ class MoodleTest(unittest.TestCase):
         self.assertEqual(
             moodle.parse_course(html),
             [{"abschnitt": "Woche 1",
-              "aktivitaeten": [{"name": "Aufgabe 1", "url": "/mod/assign/view.php?id=5"}]}],
+              "aktivitaeten": [{"name": "Aufgabe 1", "typ": "assign", "url": "/mod/assign/view.php?id=5"}]}],
         )
 
     def test_page_rejects_foreign_paths(self):
         from website_mcp.http import SiteError
         with self.assertRaises(SiteError):
             moodle.page("//evil.example/")
+
+
+class NavigiumTest(unittest.TestCase):
+    def test_parse_lessons_dedupes(self):
+        item = {"name": "prima_1-1", "eigner": "x", "cat": "default", "lang": "LA",
+                "key": {"id": "92975"}, "subcat": {"id": 0, "name": "-"}}
+        out = navigium.parse_lessons([item, dict(item), {"name": "ohne key"}])
+        self.assertEqual(out, [{"id": 92975, "name": "prima_1-1", "eigner": "x", "gruppe": "default",
+                                "unterkategorie": None, "sprache": "LA"}])
+
+    def test_parse_vocab_drops_empty_fields(self):
+        data = {"lektionId": 1, "lektionName": "L1", "vokabeln": [
+            {"latein": "cogitare", "stammformen": "cogitare", "genus": "", "wortart": "VERB",
+             "bedeutungen": ["denken", "nachdenken"], "phrasen": [], "merkhilfe": "EN cogitate",
+             "obligatorisch": True},
+            {"latein": "dominus", "stammformen": "dominus, -i", "genus": "m", "bedeutungen": ["Herr"]}]}
+        out = navigium.parse_vocab(data)
+        self.assertEqual(out["anzahl"], 2)
+        self.assertEqual(out["vokabeln"][0], {"latein": "cogitare", "wortart": "VERB",
+                                              "deutsch": ["denken", "nachdenken"],
+                                              "merkhilfe": "EN cogitate", "pflicht": True})
+        self.assertEqual(out["vokabeln"][1]["stammformen"], "dominus, -i")
 
 
 class HttpTest(unittest.TestCase):
