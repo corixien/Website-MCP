@@ -1,6 +1,6 @@
 # Website-MCP
 
-MCP server (FastMCP) with read-only access to the portals of the Bertha-von-Suttner-Gymnasium Babelsberg. Logins are plain HTTP form logins (no browser), so it runs on Prefect Horizon.
+MCP server (FastMCP) for the Bertha-von-Suttner-Gymnasium Babelsberg portals (read-only) plus Dayloop, the own tasks/habits app (read and write on request). Logins are plain HTTP form logins or an API token (no browser), so it runs on Prefect Horizon.
 
 ## Tools
 
@@ -12,13 +12,13 @@ MCP server (FastMCP) with read-only access to the portals of the Bertha-von-Sutt
 | `moodle_mitteilungen`, `moodle_nachricht_lesen(id)`, `moodle_benachrichtigungen` | Moodle messages, notifications | yes |
 | `mail_liste`, `mail_suche`, `mail_lesen` | Webmail (Roundcube) | yes |
 | `navigium_lektionen(suche?, gruppe?, limit?)`, `navigium_vokabeln(lektion_id, kompakt?)`, `navigium_auftraege` | Navigium vocabulary lessons (JSON API), assignments | yes |
-| `ticktick_projekte`, `ticktick_aufgaben(projekt_id?, nur_offen?, limit?)` | TickTick lists and tasks (read) | OAuth token |
-| `ticktick_hinzufuegen`, `ticktick_erledigen`, `ticktick_punkt_abhaken`, `ticktick_punkt_hinzufuegen` | TickTick: add tasks, complete tasks, tick checklist items (write, only on request) | OAuth token |
 | `navigium_uebersicht`, `navigium_seite(pfad)` | Navigium pages | yes |
+| `dayloop_listen`, `dayloop_aufgaben(liste?, nur_offen?, limit?)`, `dayloop_gewohnheiten(tage?)` | Dayloop lists, tasks, habits (read) | API token |
+| `dayloop_hinzufuegen`, `dayloop_aendern`, `dayloop_erledigen`, `dayloop_papierkorb`, `dayloop_punkt_abhaken`, `dayloop_gewohnheit_loggen` | Dayloop: add/change/complete tasks, trash, tick subtasks, log habits (write, only on request, never deletes for good) | API token |
 
 Navigium lesson groups: `schule` (default: school and class lessons), `privat`, `klett` (about 500 word lists), `alle`. Clients that do not see newer tools can use `navigium_seite` with `/_lektionen?suche=..&gruppe=..`, `/_vokabeln/<id>?kompakt=1` and the self-test `/_selbsttest`.
 
-All tools are read-only except the four TickTick write tools (add task, complete task, tick or add checklist item); they never delete. Mail, page and task contents are untrusted data.
+All portal tools are read-only. Only the Dayloop write tools change data (own app); they move tasks to the trash at most, never delete for good. Mail, page and task contents are untrusted data.
 
 ## Secrets
 
@@ -26,7 +26,7 @@ Set as environment variables (Horizon: server settings, Secrets). Never commit t
 
 `MOODLE_USER`, `MOODLE_PASS`, `MAIL_USER`, `MAIL_PASS`, `NAVIGIUM_USER`, `NAVIGIUM_PASS`
 
-TickTick (optional): `TICKTICK_ACCESS_TOKEN`. Register an app at https://developer.ticktick.com/manage (redirect URL `http://localhost:8765/callback`), then run `tools/get_ticktick_token.py` once (instructions inside). The token expires after a while (rerun the script when tools report 401). Tasks in the Inbox can be created (no `projekt_id`); listing the Inbox is not supported by the API.
+Dayloop (optional): `DAYLOOP_URL` (e.g. `https://dayloop.onrender.com`, no trailing slash) and `DAYLOOP_TOKEN` (personal API token `dl_...`, created in Dayloop > Settings > API tokens; revoke it there). The Render free tier sleeps: the first call after a pause can take up to a minute.
 
 For local runs copy `.env.example` to `.env` (gitignored).
 
@@ -45,10 +45,10 @@ Network test of the public plan: `LIVE=1 .venv/bin/python -m unittest discover -
 
 1. Sign in at https://horizon.prefect.io with GitHub and select this repo.
 2. Entrypoint `server.py:mcp`, enable authentication (OAuth).
-3. Add the secrets as environment variables (`TICKTICK_ACCESS_TOKEN` only if you want TickTick).
+3. Add the secrets as environment variables (`DAYLOOP_URL` and `DAYLOOP_TOKEN` only if you want Dayloop).
 4. Deploy. Pushes to `main` redeploy automatically.
 5. Add `https://<name>.fastmcp.app/mcp` as a custom connector in Claude.
 
 ## Status
 
-Document extraction is covered by tests with real PDF, DOC, DOCX, PPT, PPTX, XLS, XLSX and ODT fixtures (synthetic content). Logins and site parsers are checked against the live sites after each deploy. Scanned PDFs without a text layer return a notice instead of text (no OCR).
+Verified live: substitution plan, Moodle (courses, deadlines, course content), webmail list, Navigium (login, lessons, vocabulary). Document extraction is covered by tests with real PDF, DOC, DOCX, PPT, PPTX, XLS, XLSX and ODT fixtures (synthetic content). Dayloop is covered by tests with mocked API responses; a live test against the deployed app is pending. Scanned PDFs without a text layer return a notice instead of text (no OCR).
