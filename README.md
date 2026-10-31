@@ -13,8 +13,8 @@ MCP server (FastMCP) for the Bertha-von-Suttner-Gymnasium Babelsberg portals (re
 | `mail_liste`, `mail_suche`, `mail_lesen` | Webmail (Roundcube) | yes |
 | `navigium_lektionen(suche?, gruppe?, limit?)`, `navigium_vokabeln(lektion_id, kompakt?)`, `navigium_auftraege` | Navigium vocabulary lessons (JSON API), assignments | yes |
 | `navigium_uebersicht`, `navigium_seite(pfad)` | Navigium pages | yes |
-| `dayloop_listen`, `dayloop_aufgaben(liste?, nur_offen?, limit?)`, `dayloop_gewohnheiten(tage?)` | Dayloop lists, tasks, habits (read) | API token |
-| `dayloop_hinzufuegen`, `dayloop_aendern`, `dayloop_erledigen`, `dayloop_papierkorb`, `dayloop_punkt_abhaken`, `dayloop_gewohnheit_loggen` | Dayloop: add/change/complete tasks, trash, tick subtasks, log habits (write, only on request, never deletes for good) | API token |
+| `dayloop_aufgaben(nur_offen?, limit?)`, `dayloop_kalender(tage_voraus?, tage_zurueck?)`, `dayloop_erledigt(tage?)`, `dayloop_gewohnheiten(tage?)` | Dayloop todos with deadlines, calendar view, Have Done list, habits (read) | API token |
+| `dayloop_hinzufuegen`, `dayloop_aendern`, `dayloop_erledigen`, `dayloop_papierkorb`, `dayloop_punkt_abhaken`, `dayloop_erledigt_eintragen`, `dayloop_gewohnheit_loggen` | Dayloop: add/change/complete todos, trash, tick subtasks, add Have Done entries, log habits (write, only on request, never deletes for good) | API token |
 
 Navigium lesson groups: `schule` (default: school and class lessons), `privat`, `klett` (about 500 word lists), `alle`. Clients that do not see newer tools can use `navigium_seite` with `/_lektionen?suche=..&gruppe=..`, `/_vokabeln/<id>?kompakt=1` and the self-test `/_selbsttest`.
 
