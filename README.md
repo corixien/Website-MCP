@@ -13,8 +13,8 @@ MCP server (FastMCP) for the Bertha-von-Suttner-Gymnasium Babelsberg portals (re
 | `mail_liste`, `mail_suche`, `mail_lesen` | Webmail (Roundcube) | yes |
 | `navigium_lektionen(suche?, gruppe?, limit?)`, `navigium_vokabeln(lektion_id, kompakt?)`, `navigium_auftraege` | Navigium vocabulary lessons (JSON API), assignments | yes |
 | `navigium_uebersicht`, `navigium_seite(pfad)` | Navigium pages | yes |
-| `dayloop_aufgaben(nur_offen?, limit?)`, `dayloop_kalender(tage_voraus?, tage_zurueck?)`, `dayloop_erledigt(tage?)`, `dayloop_gewohnheiten(tage?)` | Dayloop todos with deadlines, calendar view, Have Done list, habits (read) | API token |
-| `dayloop_hinzufuegen`, `dayloop_aendern`, `dayloop_erledigen`, `dayloop_papierkorb`, `dayloop_punkt_abhaken`, `dayloop_erledigt_eintragen`, `dayloop_gewohnheit_loggen` | Dayloop: add/change/complete todos, trash, tick subtasks, add Have Done entries, log habits (write, only on request, never deletes for good) | API token |
+| `dayloop_aufgaben(nur_offen?, limit?)`, `dayloop_kalender(tage_voraus?, tage_zurueck?)`, `dayloop_erledigt(tage?)`, `dayloop_gewohnheiten(tage?)`, `dayloop_fokus(tage?)` | Dayloop todos with deadlines and checklists, calendar view (incl. completions, ticked points, habits), Have Done list, habits, focus statistics (read) | API token |
+| `dayloop_hinzufuegen`, `dayloop_aendern`, `dayloop_erledigen`, `dayloop_papierkorb`, `dayloop_punkt_abhaken`, `dayloop_punkt_hinzufuegen`, `dayloop_erledigt_eintragen`, `dayloop_gewohnheit_loggen`, `dayloop_gewohnheit_anlegen`, `dayloop_gewohnheit_aendern`, `dayloop_gewohnheit_loeschen` | Dayloop: full control of todos (repeat, reminders, checklist in notes), trash/restore/delete, Have Done entries, habits (write, only on request; permanent deletes only when explicitly asked) | API token |
 
 Navigium lesson groups: `schule` (default: school and class lessons), `privat`, `klett` (about 500 word lists), `alle`. Clients that do not see newer tools can use `navigium_seite` with `/_lektionen?suche=..&gruppe=..`, `/_vokabeln/<id>?kompakt=1` and the self-test `/_selbsttest`.
 

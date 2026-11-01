@@ -53,3 +53,5 @@ Run from `~/Website-MCP`.
 
 ## Maintenance rules
 Update this file when structure, commands, invariants or state change. Bump "Last updated".
+
+- 2026-11-01: Dayloop module now treats checklist lines in notes (`- [ ]`/`- [x@ms]`) as points, adds repeat/reminders, trash actions, habit management, `dayloop_fokus`, calendar with ticked points and habit completions. Tests in tests/test_dayloop.py. Horizon redeploys on push.
