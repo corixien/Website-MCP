@@ -99,6 +99,7 @@ def task_dict(item: dict) -> dict:
         "wiederholung": f"{rep['freq']} alle {rep.get('interval', 1)}" if rep else None,
         "erinnerungen_min_vorher": [r["offsetMin"] for r in d.get("reminders", [])] or None,
         "erledigt": d.get("done"),
+        "in_todo_ab_min_vorher": d.get("showBeforeMin"),
     }
     if d.get("done") and d.get("completedAt"):
         out["erledigt_am"], out["erledigt_um"] = _hm(d["completedAt"])
@@ -128,8 +129,18 @@ def _repeat(wiederholung: str | None, intervall: int) -> dict | None:
     return {"freq": REPEAT[wiederholung], "interval": max(1, min(intervall, 365))}
 
 
+def _lead(minuten: int | None) -> int | None:
+    """Appointment lead time: minutes before the deadline from which the task shows in the Todo list; -1 = ordinary task."""
+    if minuten is None:
+        return None
+    if minuten < 0:
+        return None
+    return min(int(minuten), 525600)
+
+
 def add_task(titel: str, notizen: str | None, deadline: str | None, prioritaet: str | None, punkte: list[str] | None,
-             wiederholung: str | None = None, intervall: int = 1, erinnerungen: list[int] | None = None) -> dict:
+             wiederholung: str | None = None, intervall: int = 1, erinnerungen: list[int] | None = None,
+             in_todo_ab: int | None = None) -> dict:
     day, hm = _due(deadline)
     if prioritaet and prioritaet not in PRIORITY:
         raise SiteError("prioritaet: keine, niedrig, mittel, hoch.")
@@ -142,6 +153,10 @@ def add_task(titel: str, notizen: str | None, deadline: str | None, prioritaet: 
     rep = _repeat(wiederholung, intervall)
     if rep:
         data["repeat"] = rep
+    if in_todo_ab is not None and in_todo_ab >= 0:
+        if not day:
+            raise SiteError("in_todo_ab_min_vorher braucht eine deadline.")
+        data["showBeforeMin"] = _lead(in_todo_ab)
     if erinnerungen is not None:
         data["reminders"] = [{"offsetMin": max(0, int(m))} for m in erinnerungen]
     elif day and hm:
@@ -151,7 +166,7 @@ def add_task(titel: str, notizen: str | None, deadline: str | None, prioritaet: 
 
 def update_task(aufgabe_id: str, titel: str | None, notizen: str | None, deadline: str | None, prioritaet: str | None,
                 punkte: list[str] | None = None, wiederholung: str | None = None, intervall: int = 1,
-                erinnerungen: list[int] | None = None) -> dict:
+                erinnerungen: list[int] | None = None, in_todo_ab: int | None = None) -> dict:
     patch: dict[str, Any] = {}
     if titel:
         patch["title"] = titel
@@ -177,6 +192,8 @@ def update_task(aufgabe_id: str, titel: str | None, notizen: str | None, deadlin
         patch["repeat"] = _repeat(wiederholung, intervall)
     if erinnerungen is not None:
         patch["reminders"] = [{"offsetMin": max(0, int(m))} for m in erinnerungen]
+    if in_todo_ab is not None:
+        patch["showBeforeMin"] = _lead(in_todo_ab)  # -1 turns it back into an ordinary task
     if not patch:
         raise SiteError("Nichts zu ändern angegeben.")
     return task_dict(_request("PATCH", f"/api/items/task/{aufgabe_id}", json={"data": patch}))

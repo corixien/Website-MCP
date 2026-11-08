@@ -199,6 +199,15 @@ class ManageTest(unittest.TestCase):
         with self.assertRaises(SiteError):
             dayloop.trash_task("t1", "kaputt")
 
+    def test_appointment_lead_time(self):
+        dayloop.update_task("t1", None, None, None, None, in_todo_ab=120)
+        self.assertEqual(self.patch_body()["showBeforeMin"], 120)
+        dayloop.update_task("t1", None, None, None, None, in_todo_ab=-1)
+        self.assertIsNone(self.patch_body()["showBeforeMin"])
+        with self.assertRaises(SiteError):
+            dayloop.add_task("x", None, None, None, None, in_todo_ab=30)
+        self.assertEqual(dayloop.task_dict({"id": "a", "data": {"title": "x", "showBeforeMin": 60}})["in_todo_ab_min_vorher"], 60)
+
     def test_habit_management_and_focus(self):
         r = dayloop.add_habit("Lesen", 2, "Seiten", [1, 2], "blue", "07:30")
         post = next(c for c in self.calls if c[0] == "POST")[2]["data"]
