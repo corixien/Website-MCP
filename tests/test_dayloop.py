@@ -218,3 +218,77 @@ class ManageTest(unittest.TestCase):
         f = dayloop.focus(7)
         self.assertEqual(list(f["pro_tag"].values())[0], {"sessions": 1, "minuten": 25})
         self.assertEqual(f["pro_aufgabe_sessions"], {"T": 1})
+
+
+class PlanTest(unittest.TestCase):
+    P1 = {"id": "p1", "type": "plan", "data": {"title": "Lernen", "date": "2999-11-09", "start": "09:00", "end": "10:30", "notes": "Kapitel 3\n- [ ] Vokabeln\n- [x] Text"}}
+    P2 = {"id": "p2", "type": "plan", "data": {"title": "Sport", "date": "2999-11-09", "start": "08:00", "end": "08:45"}}
+    P3 = {"id": "p3", "type": "plan", "data": {"title": "Später", "date": "2999-11-10", "start": "12:00", "end": "13:00"}}
+
+    def setUp(self):
+        self.calls = []
+        os.environ.update(DAYLOOP_URL="https://dl.test", DAYLOOP_TOKEN="dl_secret")
+        dayloop._transport = httpx.MockTransport(self.handler)
+
+    def tearDown(self):
+        dayloop._transport = None
+
+    def handler(self, request):
+        body = json.loads(request.content) if request.content else None
+        self.calls.append((request.method, request.url.path, body))
+        path = request.url.path
+        if path == "/api/items" and request.url.params.get("type") == "plan":
+            return httpx.Response(200, json=[self.P1, self.P2, self.P3])
+        if path == "/api/items/plan" and request.method == "POST":
+            return httpx.Response(201, json={"id": "new", "type": "plan", "data": body["data"]})
+        if path == "/api/items/plan/p1" and request.method == "GET":
+            return httpx.Response(200, json=self.P1)
+        if path == "/api/items/plan/p1" and request.method == "PATCH":
+            return httpx.Response(200, json={**self.P1, "data": {**self.P1["data"], **body["data"]}})
+        if request.method == "DELETE":
+            return httpx.Response(204)
+        return httpx.Response(404)
+
+    def test_plan_lists_days_chronologically_with_empty_days(self):
+        out = dayloop.plan("2999-11-09", 3)
+        self.assertEqual([d["datum"] for d in out["tage"]], ["2999-11-09", "2999-11-10", "2999-11-11"])
+        self.assertEqual([b["titel"] for b in out["tage"][0]["bloecke"]], ["Sport", "Lernen"])
+        self.assertEqual(out["tage"][2]["bloecke"], [])
+        lern = out["tage"][0]["bloecke"][1]
+        self.assertEqual((lern["notizen"], lern["punkte"]), ("Kapitel 3", [{"titel": "Vokabeln", "erledigt": False}, {"titel": "Text", "erledigt": True}]))
+
+    def test_add_defaults_and_validation(self):
+        r = dayloop.add_plan("Mathe", "9:30", None, "2999-11-09", "Aufgaben", ["A1", "A2"])
+        body = self.calls[-1][2]["data"]
+        self.assertEqual((body["start"], body["end"], body["date"]), ("09:30", "10:30", "2999-11-09"))
+        self.assertEqual(body["notes"], "Aufgaben\n- [ ] A1\n- [ ] A2")
+        self.assertEqual(r["ende"], "10:30")
+        for bad in (("x", "10:00", "09:00"), ("x", "25:00", None), ("", "09:00", "10:00")):
+            with self.assertRaises(SiteError):
+                dayloop.add_plan(bad[0], bad[1], bad[2], None, None, None)
+
+    def test_update_move_keeps_length_and_checks_items(self):
+        dayloop.update_plan("p1", None, "13:00", None, None, None, None)
+        d = self.calls[-1][2]["data"]
+        self.assertEqual((d["start"], d["end"]), ("13:00", "14:30"))
+        dayloop.update_plan("p1", "Neu", None, "11:00", "2999-11-12", None, ["Text", "Neu"])
+        d = self.calls[-1][2]["data"]
+        self.assertEqual((d["title"], d["end"], d["date"]), ("Neu", "11:00", "2999-11-12"))
+        self.assertEqual(d["notes"], "Kapitel 3\n- [x] Text\n- [ ] Neu")
+        dayloop.check_plan_item("p1", "vokabeln", True)
+        self.assertIn("- [x@", self.calls[-1][2]["data"]["notes"])
+        with self.assertRaises(SiteError):
+            dayloop.update_plan("p1", None, "11:00", "10:00", None, None, None)
+        with self.assertRaises(SiteError):
+            dayloop.update_plan("p1", None, None, None, None, None, None)
+
+    def test_set_day_validates_before_writing_and_replaces(self):
+        with self.assertRaises(SiteError):
+            dayloop.set_plan_day("2999-11-09", [{"titel": "a", "start": "09:00"}, {"titel": "b", "start": "11:00", "ende": "10:00"}], True)
+        self.assertFalse([c for c in self.calls if c[0] in ("POST", "DELETE")])
+        out = dayloop.set_plan_day("2999-11-09", [{"titel": "a", "start": "09:00", "ende": "10:00", "punkte": ["x"]}], True)
+        self.assertEqual((out["entfernt"], out["angelegt"]), (2, 1))
+        self.assertEqual([c[0] for c in self.calls if c[0] in ("POST", "DELETE")], ["DELETE", "DELETE", "POST"])
+
+    def test_delete(self):
+        self.assertTrue(dayloop.delete_plan("p1")["geloescht"])

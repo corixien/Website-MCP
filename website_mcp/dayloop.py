@@ -384,3 +384,156 @@ def focus(tage: int) -> dict:
             name = titles.get(d["taskId"]) or d["taskId"]
             per_task[name] = per_task.get(name, 0) + 1
     return {"pro_tag": dict(sorted(per_day.items(), reverse=True)), "pro_aufgabe_sessions": per_task}
+
+
+# ---- Plan page: time blocks of a day (made by Claude, editable by the user in the app) ----
+
+_HM = re.compile(r"([01]\d|2[0-3]):[0-5]\d")
+
+
+def _today() -> str:
+    return datetime.now(TZ).date().isoformat()
+
+
+def _plan_date(datum: str | None) -> str:
+    day = (datum or "").strip() or _today()
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", day):
+        raise SiteError("datum muss 'YYYY-MM-DD' sein.")
+    return day
+
+
+def _plan_time(value: str, name: str) -> str:
+    v = (value or "").strip()
+    if re.fullmatch(r"\d:[0-5]\d", v):
+        v = "0" + v
+    if not _HM.fullmatch(v):
+        raise SiteError(f"{name} muss 'HH:MM' sein (00:00 bis 23:59).")
+    return v
+
+
+def _plan_range(start: str, ende: str | None) -> tuple[str, str]:
+    s = _plan_time(start, "start")
+    if ende in (None, ""):
+        m = min(int(s[:2]) * 60 + int(s[3:]) + 60, 1439)
+        e = f"{m // 60:02d}:{m % 60:02d}"
+    else:
+        e = _plan_time(ende, "ende")
+    if e <= s:
+        raise SiteError("ende muss nach start liegen (am selben Tag, spätestens 23:59).")
+    return s, e
+
+
+def plan_dict(item: dict) -> dict:
+    d = item["data"]
+    text, checks = parse_notes(d.get("notes"))
+    out = {
+        "id": item["id"], "datum": d.get("date"), "start": d.get("start"), "ende": d.get("end"), "titel": d.get("title"),
+        "notizen": "\n".join(text).strip() or None,
+        "punkte": [{"titel": c["titel"], "erledigt": c["erledigt"]} for c in checks],
+    }
+    return {k: v for k, v in out.items() if v not in (None, "", [], {})}
+
+
+def _plan_rows(day: str | None = None) -> list[dict]:
+    rows = _items("plan")
+    if day:
+        rows = [i for i in rows if i["data"].get("date") == day]
+    return sorted(rows, key=lambda i: (i["data"].get("date", ""), i["data"].get("start", ""), i["data"].get("end", "")))
+
+
+def plan(datum: str | None, tage: int) -> dict:
+    """Plan blocks from `datum` (default today) for `tage` days, chronological; days without blocks are listed empty."""
+    first = date.fromisoformat(_plan_date(datum))
+    n = max(1, min(tage, 31))
+    wanted = [(first + timedelta(days=i)).isoformat() for i in range(n)]
+    by_day: dict[str, list[dict]] = {d: [] for d in wanted}
+    for i in _plan_rows():
+        if i["data"].get("date") in by_day:
+            by_day[i["data"]["date"]].append(plan_dict(i))
+    return {"tage": [{"datum": d, "bloecke": by_day[d]} for d in wanted]}
+
+
+def _plan_notes(notizen: str | None, punkte: list[str] | None) -> str:
+    text = (notizen or "").split("\n") if notizen else []
+    return build_notes(text, [{"titel": p, "erledigt": False, "at": None} for p in punkte or []])
+
+
+def add_plan(titel: str, start: str, ende: str | None, datum: str | None, notizen: str | None, punkte: list[str] | None) -> dict:
+    if not (titel or "").strip():
+        raise SiteError("titel fehlt.")
+    s, e = _plan_range(start, ende)
+    data = {"title": titel.strip(), "date": _plan_date(datum), "start": s, "end": e}
+    notes = _plan_notes(notizen, punkte)
+    if notes:
+        data["notes"] = notes
+    return plan_dict(_request("POST", "/api/items/plan", json={"data": data}))
+
+
+def update_plan(plan_id: str, titel: str | None, start: str | None, ende: str | None, datum: str | None,
+                notizen: str | None, punkte: list[str] | None) -> dict:
+    current = _request("GET", f"/api/items/plan/{plan_id}")["data"]
+    patch: dict[str, Any] = {}
+    if titel is not None:
+        if not titel.strip():
+            raise SiteError("titel darf nicht leer sein.")
+        patch["title"] = titel.strip()
+    if datum is not None:
+        patch["date"] = _plan_date(datum)
+    if start is not None or ende is not None:
+        s = _plan_time(start, "start") if start else current["start"]
+        e = _plan_time(ende, "ende") if ende else current["end"]
+        if start and not ende and e <= s:  # moving the start keeps the length
+            m = min(int(s[:2]) * 60 + int(s[3:]) + (int(current["end"][:2]) * 60 + int(current["end"][3:]) - int(current["start"][:2]) * 60 - int(current["start"][3:])), 1439)
+            e = f"{m // 60:02d}:{m % 60:02d}"
+        s, e = _plan_range(s, e)
+        patch["start"], patch["end"] = s, e
+    if notizen is not None or punkte is not None:
+        text, checks = parse_notes(current.get("notes"))
+        if notizen is not None:
+            text = notizen.split("\n") if notizen else []
+        if punkte is not None:  # same titles keep their state
+            old = {c["titel"].lower(): c for c in checks}
+            checks = [old.get(p.lower(), {"titel": p, "erledigt": False, "at": None}) for p in punkte]
+        patch["notes"] = build_notes(text, checks)
+    if not patch:
+        raise SiteError("Nichts zu ändern angegeben.")
+    return plan_dict(_request("PATCH", f"/api/items/plan/{plan_id}", json={"data": patch}))
+
+
+def delete_plan(plan_id: str) -> dict:
+    _request("DELETE", f"/api/items/plan/{plan_id}")
+    return {"id": plan_id, "geloescht": True}
+
+
+def check_plan_item(plan_id: str, punkt: str, erledigt: bool) -> dict:
+    current = _request("GET", f"/api/items/plan/{plan_id}")["data"]
+    text, checks = parse_notes(current.get("notes"))
+    titles = [c["titel"].lower() for c in checks]
+    idx = int(punkt) - 1 if punkt.isdigit() else titles.index(punkt.lower()) if punkt.lower() in titles else -1
+    if not 0 <= idx < len(checks):
+        raise SiteError(f"Punkt '{punkt}' nicht gefunden.")
+    checks[idx]["erledigt"] = erledigt
+    checks[idx]["at"] = _now_ms() if erledigt else None
+    return plan_dict(_request("PATCH", f"/api/items/plan/{plan_id}", json={"data": {"notes": build_notes(text, checks)}}))
+
+
+def set_plan_day(datum: str, bloecke: list[dict], ersetzen: bool) -> dict:
+    """Write a whole day at once. Everything is validated first; with ersetzen the day's existing blocks are removed."""
+    day = _plan_date(datum)
+    prepared = []
+    for b in bloecke:
+        if not str(b.get("titel", "")).strip():
+            raise SiteError("Jeder Block braucht einen titel.")
+        s, e = _plan_range(b.get("start", ""), b.get("ende"))
+        data = {"title": str(b["titel"]).strip(), "date": day, "start": s, "end": e}
+        notes = _plan_notes(b.get("notizen"), b.get("punkte"))
+        if notes:
+            data["notes"] = notes
+        prepared.append(data)
+    removed = 0
+    if ersetzen:
+        for i in _plan_rows(day):
+            _request("DELETE", f"/api/items/plan/{i['id']}")
+            removed += 1
+    created = [plan_dict(_request("POST", "/api/items/plan", json={"data": d})) for d in prepared]
+    return {"datum": day, "entfernt": removed, "angelegt": len(created), "bloecke": created}
