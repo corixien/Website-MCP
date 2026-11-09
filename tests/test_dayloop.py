@@ -113,6 +113,68 @@ class DayloopTest(unittest.TestCase):
         with self.assertRaises(LoginFailed):
             dayloop.tasks(True, 5)
 
+class PlanEntriesTest(unittest.TestCase):
+    """Plan blocks reference real todos and their points (ids), read live; open work can be carried to the next day."""
+
+    def setUp(self):
+        self.calls = []
+        self.task = {"id": "t1", "type": "task", "data": {"title": "Referat", "done": False, "trashedAt": None,
+                     "notes": "- [ ] Quellen\n- [x@5#bb22] Gliederung\n- [ #aa11] Text"}}
+        self.old = {"id": "p1", "type": "plan", "data": {"title": "Schule", "date": "2999-11-08", "start": "15:00", "end": "17:00",
+                    "entries": [{"taskId": "t1", "points": None}]}}
+        os.environ.update(DAYLOOP_URL="https://dl.test", DAYLOOP_TOKEN="dl_secret")
+        dayloop._transport = httpx.MockTransport(self.handler)
+
+    def tearDown(self):
+        dayloop._transport = None
+
+    def handler(self, request):
+        body = json.loads(request.content) if request.content else None
+        self.calls.append((request.method, request.url.path, body))
+        path, kind = request.url.path, request.url.params.get("type")
+        if path == "/api/items" and kind == "task":
+            return httpx.Response(200, json=[self.task])
+        if path == "/api/items" and kind == "plan":
+            return httpx.Response(200, json=[self.old])
+        if path == "/api/items/task/t1" and request.method == "GET":
+            return httpx.Response(200, json=self.task)
+        if path == "/api/items/task/t1" and request.method == "PATCH":
+            self.task["data"].update(body["data"])
+            return httpx.Response(200, json=self.task)
+        if path == "/api/items/plan" and request.method == "POST":
+            return httpx.Response(201, json={"id": "new", "type": "plan", "data": body["data"]})
+        return httpx.Response(404)
+
+    def test_notes_keep_point_ids(self):
+        text, checks = dayloop.parse_notes(self.task["data"]["notes"])
+        self.assertEqual([c.get("id") for c in checks], [None, "bb22", "aa11"])
+        self.assertEqual(dayloop.build_notes(text, checks), self.task["data"]["notes"])
+
+    def test_linking_gives_every_point_an_id_and_selects_by_title(self):
+        dayloop.add_plan("Schule", "15:00", "17:00", "2999-11-09", None, None, [{"aufgabe_id": "t1", "punkte": ["Quellen", "aa11"]}])
+        created = [c for c in self.calls if c[0] == "POST"][-1][2]["data"]
+        ids = [c["id"] for c in dayloop.parse_notes(self.task["data"]["notes"])[1]]
+        self.assertTrue(all(ids))
+        self.assertEqual(created["entries"], [{"taskId": "t1", "points": [ids[0], "aa11"]}])
+
+    def test_plan_shows_live_points_and_check_by_id(self):
+        out = dayloop.plan("2999-11-08", 1)["tage"][0]["bloecke"][0]
+        e = out["eintraege"][0]
+        self.assertEqual((e["aufgabe_id"], e["titel"], len(e["punkte"])), ("t1", "Referat", 3))
+        self.assertEqual(e["punkte"][1], {"punkt_id": "bb22", "titel": "Gliederung", "erledigt": True})
+        dayloop.check_item("t1", "aa11", True)
+        self.assertIn("- [x@", self.task["data"]["notes"].split("\n")[2])
+        self.assertIn("#aa11] Text", self.task["data"]["notes"])
+
+    def test_carry_over_moves_only_open_work(self):
+        r = dayloop.carry_over_plan("2999-11-08", "2999-11-09")
+        self.assertEqual((r["bloecke_angelegt"], r["aufgaben_uebertragen"]), (1, 1))
+        body = [c for c in self.calls if c[0] == "POST"][-1][2]["data"]
+        self.assertEqual((body["title"], body["date"], body["start"]), ("Schule", "2999-11-09", "15:00"))
+        self.task["data"]["done"] = True
+        self.calls.clear()
+        self.assertEqual(dayloop.carry_over_plan("2999-11-08", "2999-11-09")["aufgaben_uebertragen"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()
