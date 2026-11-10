@@ -175,6 +175,33 @@ class PlanEntriesTest(unittest.TestCase):
         self.calls.clear()
         self.assertEqual(dayloop.carry_over_plan("2999-11-08", "2999-11-09")["aufgaben_uebertragen"], 0)
 
+class InfoTest(unittest.TestCase):
+    def setUp(self):
+        self.calls = []
+        os.environ.update(DAYLOOP_URL="https://dl.test", DAYLOOP_TOKEN="dl_secret")
+        dayloop._transport = httpx.MockTransport(self.handler)
+
+    def tearDown(self):
+        dayloop._transport = None
+
+    def handler(self, request):
+        body = json.loads(request.content) if request.content else None
+        self.calls.append((request.method, request.url.path, body))
+        if request.url.path == "/api/items" and request.url.params.get("type") == "info":
+            return httpx.Response(200, json=[{"id": "i1", "type": "info", "data": {"title": "Klausur", "date": "2999-01-05", "endDate": None}}])
+        if request.url.path == "/api/items/info" and request.method == "POST":
+            return httpx.Response(201, json={"id": "new", "type": "info", "data": body["data"]})
+        return httpx.Response(204)
+
+    def test_list_add_delete(self):
+        self.assertEqual(dayloop.info_list("2999-01-01", 30)["eintraege"], [{"id": "i1", "titel": "Klausur", "datum": "2999-01-05"}])
+        r = dayloop.add_info(" Ferien ", "2999-02-01", "2999-02-06", "x")
+        self.assertEqual(self.calls[-1][2]["data"], {"title": "Ferien", "date": "2999-02-01", "endDate": "2999-02-06", "note": "x"})
+        self.assertEqual(r["bis"], "2999-02-06")
+        with self.assertRaises(SiteError):
+            dayloop.add_info("x", "2999-02-06", "2999-02-01", None)
+        self.assertTrue(dayloop.delete_info("i1")["geloescht"])
+
 
 if __name__ == "__main__":
     unittest.main()

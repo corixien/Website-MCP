@@ -660,3 +660,35 @@ def carry_over_plan(von: str | None, nach: str | None) -> dict:
             updated += 1
             moved += len(add)
     return {"von": from_day, "nach": to_day, "bloecke_angelegt": created, "bloecke_ergaenzt": updated, "aufgaben_uebertragen": moved}
+
+
+def _info_dict(item: dict) -> dict:
+    d = item["data"]
+    out = {"id": item["id"], "titel": d.get("title"), "datum": d.get("date"), "bis": d.get("endDate"), "notiz": d.get("note") or None}
+    return {k: v for k, v in out.items() if v not in (None, "")}
+
+
+def info_list(ab: str | None, tage: int) -> dict:
+    """Own quiet calendar dates (the built-in holidays/breaks/Abitur are in the app, not here)."""
+    first = _plan_date(ab)
+    last = (date.fromisoformat(first) + timedelta(days=max(1, min(tage, 800)))).isoformat()
+    rows = [i for i in _items("info") if (i["data"].get("endDate") or i["data"].get("date", "")) >= first and i["data"].get("date", "") <= last]
+    return {"eintraege": [_info_dict(i) for i in sorted(rows, key=lambda i: i["data"].get("date", ""))]}
+
+
+def add_info(titel: str, datum: str, bis: str | None, notiz: str | None) -> dict:
+    if not (titel or "").strip():
+        raise SiteError("titel fehlt.")
+    start = _plan_date(datum)
+    end = _plan_date(bis) if bis else None
+    if end and end < start:
+        raise SiteError("bis darf nicht vor datum liegen.")
+    data: dict[str, Any] = {"title": titel.strip(), "date": start, "endDate": end}
+    if notiz:
+        data["note"] = notiz
+    return _info_dict(_request("POST", "/api/items/info", json={"data": data}))
+
+
+def delete_info(info_id: str) -> dict:
+    _request("DELETE", f"/api/items/info/{info_id}")
+    return {"id": info_id, "geloescht": True}

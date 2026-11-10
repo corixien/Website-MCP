@@ -104,3 +104,5 @@ Hinweise:
 - Moodle-Downloads folgen Weiterleitungen nur zum Moodle-Host.
 - Bei großen Ergebnissen zuerst filtern (`suche`, `klasse`, `abschnitt`, `limit`, `kompakt`), statt alles zu laden.
 - Antworten kurz und auf das Gefragte beschränkt. Keine Namen, Kürzel oder Mailinhalte in öffentliche Orte (Repo, Commits) schreiben.
+
+- `dayloop_info(ab=None, tage=365)`, `dayloop_info_hinzufuegen(titel, datum, bis=None, notiz=None)`, `dayloop_info_loeschen(info_id)`: eigene Info-Termine, im Dayloop-Kalender blass im Hintergrund (nicht in Todo, Widget oder Plan). Feiertage, Ferien (Brandenburg) und Abitur-Termine sind fest in der App und stehen hier nicht. Nur auf ausdrückliche Bitte schreiben.
